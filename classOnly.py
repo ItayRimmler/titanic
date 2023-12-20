@@ -81,15 +81,19 @@ def ClassOnly(data):
         labelsTe = labelsTe.view(labelsTe.size(0), -1)
         dataTr = t.tensor(dataTr.values, dtype=t.float32)
         dataTr = dataTr.view(dataTr.size(0), -1)
+        # I want to class 1 be greater than class 2 and 3:
         dataTr = 1/dataTr
         dataTe = t.tensor(dataTe.values, dtype=t.float32)
         dataTe = dataTe.view(dataTe.size(0), -1)
+        # I want to class 1 be greater than class 2 and 3:
         dataTe = 1/dataTe
 
         # Setting the model up:
         model = Model(1, 1, 100)
         criterion = nn.BCELoss()
         optimizer = t.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
+
+        # TRAINING:
 
         for epoch in range(EPOCHS):
 
@@ -104,6 +108,8 @@ def ClassOnly(data):
 
             # Forward step:
             outputs = model.cont2binNonLin(x)
+
+            # Rounding results in order to get either 0 or 1:
             outputs = t.round(outputs)
 
             # Calculating loss:
@@ -118,7 +124,7 @@ def ClassOnly(data):
             finalAcc = acc/(size)
 
 
-            # Printing and plotting results:
+            # Printing and results:
             if not round(0.1 * EPOCHS) == 0:
                 if epoch % round(0.1 * EPOCHS) == 0:
                     print(f'Epoch [{epoch + 1}/{EPOCHS}], Loss: {loss.item()}, Accuracy: {finalAcc}')
@@ -126,15 +132,24 @@ def ClassOnly(data):
             if epoch == EPOCHS - 1:
                 print(f'Epoch [{epoch + 1}/{EPOCHS}], Loss: {loss.item()}, Accuracy: {finalAcc}')
 
+        # EVALUATION:
+
+        # Setting model to evaluation mode:
         model.eval()
 
+        # Forward step:
         outputs = model.cont2binNonLin(dataTe)
+
+        # Rounding results in order to get either 0 or 1:
         outputs = t.round(outputs)
 
+        # Calculating loss:
         loss = criterion(outputs, labelsTe)
 
+        # Calculating accuracy:
         acc = (outputs == labelsTe).float().sum()
         finalAcc = acc/labelsTe.size(0)
 
-        print(finalAcc.item())
+        # Printing result:
+        print(f'Test results, Loss: {loss.item()}, Accuracy: {finalAcc}')
 
