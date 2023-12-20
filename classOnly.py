@@ -128,9 +128,9 @@ def ClassOnly(data):
 
         model.eval()
 
-        # outputs = model.cont2binNonLin(dataTe)
-        # outputs = t.round(outputs)
-        outputs = model(dataTe)
+        outputs = model.cont2binNonLin(dataTe)
+        outputs = t.round(outputs)
+
         loss = criterion(outputs, labelsTe)
 
         acc = (outputs == labelsTe).float().sum()
