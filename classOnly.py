@@ -13,7 +13,7 @@ def ClassOnly(data):
 
         BATCH_PERCENT = 0.1
         EPOCHS = 500
-        LEARNING_RATE = 0.01
+        LEARNING_RATE = 0.0001
         ACCURACY_COEFF = 0.3
 
         EPOCHS = round(EPOCHS)

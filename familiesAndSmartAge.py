@@ -1,15 +1,17 @@
-# Here I'll convert the age that is NaN in a smart way: Master will be the avg age of children, Miss will be the
-# avg age of randomly young adult or children (will be randomised according to the proportion between them, Mr and
-# Mrs will be the avg age of adults.
+# Here I'll convert the age that is NaN in a smart way: Master will be the avg age of children,
+# Miss will be the avg age of randomly young adult or children (will be randomised according
+# to the proportion between them, Mr and Mrs will be the avg age of adults.
 # Also, I'll make sure to add Familiysize flag, and Familysurvivesize, and the algorithm will correlate whether it's
-# important or no.
+# important or no. -- ERR I DON'T KNOW HOW TO HANDLE THESE BECAUSE SIBSP AND PARCH ARE F'ED UP
 
 import pandas as pd
 from exceptions import tooSmall
 from modelClasses import Model
 from batch import Batch
 from sys import exit
+from scipy.stats import mode
 from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 import torch as t
 import torch.nn as nn
 import numpy as np
@@ -19,9 +21,9 @@ def FamiliesAndSmartAge(data):
 
     try:
 
-        BATCH_PERCENT = 0.1
+        BATCH_PERCENT = 0.5
         EPOCHS = 500
-        LEARNING_RATE = 0.1
+        LEARNING_RATE = 0.0001
         ACCURACY_COEFF = 0.3
 
         EPOCHS = round(EPOCHS)
@@ -76,14 +78,13 @@ def FamiliesAndSmartAge(data):
             exit(1)
     finally:
 
-        # Preprocessing the data:
+        # PREPROCESSING THE DATA:
 
-        labels = data.loc[:,'Survived']
-        data = data.loc[:,['Age', 'Name', 'SibSp', 'Parch']]
+        # We start by getting what we need from the dataframe:
+        labels = data.loc[:, 'Survived']
+        data = data.loc[:, ['Age', 'Name', 'Sex', 'Pclass', 'Fare']]
 
-        print(data)
-
-        dataTr, dataTe, labelsTr, labelsTe = train_test_split(data, labels, test_size=0.2, random_state=1)
+        dataTr, dataTe, labelsTr, labelsTe = train_test_split(data.loc[:, ['Age', 'Pclass', 'Fare']], labels, test_size=0.2, random_state=1)
 
         labelsTr = t.tensor(labelsTr.values, dtype=t.float32)
         labelsTr = labelsTr.view(labelsTr.size(0), -1)
@@ -91,17 +92,13 @@ def FamiliesAndSmartAge(data):
         labelsTe = labelsTe.view(labelsTe.size(0), -1)
         dataTr = t.tensor(dataTr.values, dtype=t.float32)
         dataTr = dataTr.view(dataTr.size(0), -1)
-        nans = t.isnan(dataTr)
-        dataTr[nans] = 25
         dataTe = t.tensor(dataTe.values, dtype=t.float32)
         dataTe = dataTe.view(dataTe.size(0), -1)
-        nans = t.isnan(dataTe)
-        dataTe[nans] = 25
 
         # Setting the model up:
-        model = Model(2, 1, 100)
+        model = Model(3, 1, 100)
         criterion = nn.BCELoss()
-        optimizer = t.optim.SGD(params=model.parameters(), lr=LEARNING_RATE)
+        optimizer = t.optim.Adam(params=model.parameters(), lr=LEARNING_RATE)
 
         for epoch in range(EPOCHS):
 
@@ -109,14 +106,31 @@ def FamiliesAndSmartAge(data):
             dataTr.requires_grad_(True)
 
             # Preparing the batch:
-            x, y = Batch(dataTr, labelsTr, dataTr.size(0)*BATCH_PERCENT)
+            x, y, size = Batch(dataTr, labelsTr, dataTr.size(0) * BATCH_PERCENT)
 
             # Setting the optimizer:
             optimizer.zero_grad()
 
             # Forward step:
-            outputs = model.cont2binNonLin(x)
-            outputs = t.round(outputs)
+            outputs = model.cont2binNonLin2(x)
+
+            # MAYBE THE PROBLEM IS IN THE ROUNDING.... I'LL CHECK IT TOMORROW
+
+            # Rounding results in order to get either 0 or 1:
+            temp = outputs
+            temp = temp.detach()
+            temp = np.array(temp)
+            modeAni = mode(temp)[0][0]
+            # if not round(0.1 * EPOCHS) == 0:
+            #     if epoch % round(0.1 * EPOCHS) == 0:
+            #         temp1 = np.array(y)
+            #         print(modeAni)
+            #         k, bins, myhist = plt.hist(temp, bins=400)
+            #         k, bins, myhist1 = plt.hist(temp1, bins=400)
+            #         plt.show()
+            with t.no_grad():
+                outputs = (outputs > modeAni).float()
+            outputs.requires_grad_(True)
 
             # Calculating loss:
             loss = criterion(outputs, y)
@@ -126,16 +140,35 @@ def FamiliesAndSmartAge(data):
             optimizer.step()
 
             # Calculating accuracy:
-            acc1 = t.gt(outputs, (1 - ACCURACY_COEFF) * y)
-            acc2 = t.gt((1 + ACCURACY_COEFF) * y, outputs)
-            acc = t.logical_and(acc1, acc2)
-            trainAcc = t.sum(acc)
-            finalAcc = trainAcc / dataTr.size(0)*BATCH_PERCENT
+            acc = (outputs == y).float().sum()
+            finalAcc = acc / (size)
 
-            # Printing and plotting results:
+            # Printing and results:
             if not round(0.1 * EPOCHS) == 0:
                 if epoch % round(0.1 * EPOCHS) == 0:
                     print(f'Epoch [{epoch + 1}/{EPOCHS}], Loss: {loss.item()}, Accuracy: {finalAcc}')
 
             if epoch == EPOCHS - 1:
                 print(f'Epoch [{epoch + 1}/{EPOCHS}], Loss: {loss.item()}, Accuracy: {finalAcc}')
+
+            # EVALUATION:
+
+            # Setting model to evaluation mode:
+        model.eval()
+
+        # Forward step:
+        outputs = model.cont2binNonLin(dataTe)
+
+        # Rounding results in order to get either 0 or 1:
+        outputs = t.round(outputs)
+
+        # Calculating loss:
+        loss = criterion(outputs, labelsTe)
+
+        # Calculating accuracy:
+        acc = (outputs == labelsTe).float().sum()
+        finalAcc = acc / labelsTe.size(0)
+
+        # Printing result:
+        print(f'Test results, Loss: {loss.item()}, Accuracy: {finalAcc}')
+
