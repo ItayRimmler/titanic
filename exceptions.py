@@ -1,3 +1,4 @@
+# This exception is indicating whether the constant value isn't in the right range:
 class tooSmall(Exception):
 
     def __init__(self, name, a=1, b=0):
