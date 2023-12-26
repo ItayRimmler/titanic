@@ -11,17 +11,17 @@ def SmartAge(data):
     #     The data which will replace NaN values (or data that helps us find data that replaces NaN values):
 
     # We calculate the mean of the Age column of minor males only. That will replace NaN ages for Master Anyname:
-    minorMaleMeanAge = notNans.loc[(notNans.Age < 18) & (notNans.Sex == 'male'), 'Age'].mean()
+    minorMaleMeanAge = notNans.loc[(notNans.Age < 14) & (notNans.Sex == 'male'), 'Age'].mean()
 
     # Miss Anyname is likely either a female young adult or a female minor. Therefore, we will start by calculating the mean of
     # female young adults, and female minors:
-    femaleYoungAdultMeanAge = notNans.loc[(notNans.Age < 27) & (notNans.Age > 17) & (notNans.Sex == 'female'), 'Age'].mean()
-    minorFemaleMeanAge = notNans.loc[(notNans.Age < 18) & (notNans.Sex == 'female'), 'Age'].mean()
+    femaleYoungAdultMeanAge = notNans.loc[(notNans.Age < 27) & (notNans.Age > 14) & (notNans.Sex == 'female'), 'Age'].mean()
+    minorFemaleMeanAge = notNans.loc[(notNans.Age < 15) & (notNans.Sex == 'female'), 'Age'].mean()
 
     # We count the amount of young females, the amount of young adult females, and minor females:
     youngFemaleCount = notNans.loc[(notNans.Age < 27) & (notNans.Sex == 'female')].shape[0]
-    youngAdultFemaleCount = notNans.loc[(notNans.Age < 27) & (notNans.Age > 17) & (notNans.Sex == 'female')].shape[0]
-    minorFemaleCount = notNans.loc[(notNans.Age < 18) & (notNans.Sex == 'female')].shape[0]
+    youngAdultFemaleCount = notNans.loc[(notNans.Age < 27) & (notNans.Age > 14) & (notNans.Sex == 'female')].shape[0]
+    minorFemaleCount = notNans.loc[(notNans.Age < 15) & (notNans.Sex == 'female')].shape[0]
 
     # We calculate the proportion of minor and young adults out of all the young females:
     youngAdultFemaleProportion = youngAdultFemaleCount / youngFemaleCount
@@ -36,9 +36,9 @@ def SmartAge(data):
     olderAdultMaleMeanAge = notNans.loc[(notNans.Age > 26) & (notNans.Sex == 'male'), 'Age'].mean()
 
     # We count the amount of adult males, the amount of young adult males, and older adult females:
-    adultMaleCount = notNans.loc[(notNans.Age >= 18) & (notNans.Sex == 'male')].shape[0]
-    youngAdultMaleCount = notNans.loc[(notNans.Age < 27) & (notNans.Age > 17) & (notNans.Sex == 'male')].shape[0]
-    olderAdultMaleCount = notNans.loc[(notNans.Age > 26) & (notNans.Sex == 'male')].shape[0]
+    adultMaleCount = notNans.loc[(notNans.Age >= 15) & (notNans.Sex == 'male')].shape[0]
+    youngAdultMaleCount = notNans.loc[(notNans.Age < 27) & (notNans.Age > 14) & (notNans.Sex == 'male')].shape[0]
+    olderAdultMaleCount = notNans.loc[(notNans.Age > 27) & (notNans.Sex == 'male')].shape[0]
 
     # We calculate the proportion of minor and young adults out of all the young females:
     youngAdultMaleProportion = youngAdultMaleCount / adultMaleCount
@@ -54,17 +54,17 @@ def SmartAge(data):
     data.loc[(data.Age % 1 != 0) & ~(data.Age % 1 < 1) & data.Name.str.contains('Master'), 'Age'] = minorMaleMeanAge
     data.loc[(data.Age % 1 != 0) & ~(data.Age % 1 < 1) & (data.Name.str.contains('Miss') | data.Name.str.contains('Ms.')), 'Age'] = youngFemaleMeanAge
     data.loc[(data.Age % 1 != 0) & ~(data.Age % 1 < 1) & data.Name.str.contains('Mrs'), 'Age'] = adultFemaleMeanAge
-    data.loc[(data.Age % 1 != 0) & ~(data.Age % 1 < 1) & ~(data.Name.str.contains('Mrs')) & ~(data.Name.str.contains('Miss')) & ~(data.Name.str.contains('Master')), 'Age'] = adultMaleMeanAge
+    data.loc[(data.Age % 1 != 0) & ~(data.Age % 1 < 1) & ~(data.Name.str.contains('Mrs')) & ~(data.Name.str.contains('Miss') | data.Name.str.contains('Ms.')) & ~(data.Name.str.contains('Master')), 'Age'] = adultMaleMeanAge
 
     return data
 
 # The following function returns the data with additional columns: boolean Mother column, Children column,
 # SurvivedWomenAndChildrenInFamily column, and SurvivedAllWomenAndChildrenInFamily column:
-def MothersAndChildren(data):
+def MothersAndChildren(data, key=None):
 
     # CONSTANTS:
     try:
-        MOTHER_AGE = 16
+        MOTHER_AGE = 18
 
         MOTHER_AGE = round(MOTHER_AGE)
 
@@ -78,7 +78,7 @@ def MothersAndChildren(data):
         if (exceptionz == False).sum() >= 2:
             raise tooSmall(name='ANY')
         if not exception1:
-            raise tooSmall(name='MOTHER_AGE', b=MOTHER_AGE)
+            raise tooSmall(name='MOTHER_AGE',a=15, b=MOTHER_AGE)
 
     except tooSmall as e:
         if e.name == 'ALL':
@@ -90,6 +90,8 @@ def MothersAndChildren(data):
 
     finally:
 
+        if key:
+            data['Survived'] = 0
         # We start off by finding which passenger might be a mother:
         maybeMother = ((data.Sex == 'female') & (data.Age >= MOTHER_AGE))
 
@@ -130,15 +132,18 @@ def MothersAndChildren(data):
         # We add the SurvivedWomenAndChildrenInFamily column to our data:
         data['SurvivedWomenAndChildrenInFamily'] = 0
 
-        # We add the SurvivedAllWomenAndChildrenInFamily column to our data (0 = irrelevant (for any non potentially a mother),
-        # 1 = True, 2 = False):
+        # We add the SurvivedAllWomenAndChildrenInFamily column to our data:
         data['SurvivedAllWomenAndChildrenInFamily'] = 0
+
+        data['Papa'] = 0
 
         # We now iterate over the data:
         for i in range(data.shape[0]):
 
+            papa = 'Mr' in data.loc[i, 'Name']
+
             # We skip on all the non-maybe-mothers:
-            if not data.loc[i, 'Mother']:
+            if not data.loc[i, 'Mother'] and not papa:
                 continue
 
             #     We check Mrs. Anyname, and the rows above her with the same last name. They might be her children. Rows below
@@ -147,6 +152,7 @@ def MothersAndChildren(data):
 
             # Flags initialization:
             shiftAmount = 1
+            childCounter = 0
             done = False
             anyname = data.shift(0).loc[i, 'Ln']
 
@@ -162,7 +168,10 @@ def MothersAndChildren(data):
 
                 # If it is, we need it to be of a person that: may be a child of Mrs. Anyname and paid the same fare as her:
                 elif data.shift(0).loc[i, 'Age'] - data.shift(shiftAmount).loc[i, 'Age'] > MOTHER_AGE and data.shift(0).loc[i, 'Fare'] == data.shift(shiftAmount).loc[i, 'Fare']:
-                    data.loc[i, 'Children'] += 1
+                    if not papa:
+                        data.loc[i, 'Children'] += 1
+                    else:
+                        childCounter += 1
 
                     # And if it is a child, we check if it survived, and update the mother's SurvivedWomenAndChildrenInFamily:
                     if data.shift(shiftAmount).loc[i, 'Survived'] == 1:
@@ -183,6 +192,9 @@ def MothersAndChildren(data):
                 data.loc[i, 'SurvivedAllWomenAndChildrenInFamily'] = 1
                 for j in range(data.loc[i, 'Children']):
                     data.shift(j + 1).loc[i, 'SurvivedAllWomenAndChildrenInFamily'] = 1
+                if papa:
+                    for j in range(childCounter):
+                        data.shift(j + 1).loc[i, 'Papa'] = 1
             # If it's not equal:
             else:
 
@@ -191,5 +203,67 @@ def MothersAndChildren(data):
                 data.loc[i, 'SurvivedAllWomenAndChildrenInFamily'] = 2
                 for j in range(data.loc[i, 'Children']):
                     data.shift(j + 1).loc[i, 'SurvivedAllWomenAndChildrenInFamily'] = 2
+                if papa:
+                    for j in range(childCounter):
+                        data.shift(j + 1).loc[i, 'Papa'] = 1
+
+        temp = pd.get_dummies(data['Ln'], prefix='Ln')
+        data = pd.concat([data, temp], axis=1)
+        for i in range(data.shape[0]):
+            for j in range(data.shape[0]):
+                if not i == j and data.loc[i, 'Ln'] == data.loc[j, 'Ln'] and data.loc[i, 'Fare'] == data.loc[j, 'Fare']:
+                    data.loc[i, 'Parch'] = data.loc[:, 'Ln_' + data.loc[i, 'Ln']].sum()
 
         return data
+
+def TicketsAndEmbarked(data):
+
+    #     Giving the embarked column a score instead of a char:
+    embarkedScore = pd.get_dummies(data['Embarked'], prefix='Embarked')
+    embarkedScore.columns = ['EmbarkedQ', 'EmbarkedC', 'EmbarkedS']
+    data = pd.concat([data, embarkedScore], axis=1)
+
+    #      Now we want to save the initial 3 digits\characters of the tickets:
+
+    # We get the initial 3 characters of our data:
+    data['TicketInitials'] = data['Ticket'].str[:]
+
+    # We create one-hot-coded dummy columns:
+    initials = data['TicketInitials'].str.get_dummies()
+
+    # We concatenate the new dummy columns with the original data frame:
+    data = pd.concat([data, initials], axis=1)
+
+    return data
+
+def convertToNum(char):
+    if char == 'A':
+        return 11100
+    if char == 'C':
+        return 22200
+    if char == '.':
+        return 3001
+    if char == '/':
+        return 4001
+    if char == 'P':
+        return 50050
+    if char == 'W':
+        return 66600
+    if char == 'a':
+        return 7000
+    if char == 'O':
+        return 5500
+    if char == 'T':
+        return 9000
+    if char == 'E':
+        return 8800
+    if char == 'F':
+        return 70000
+    if char == 'L':
+        return 80000
+    if char == 'I':
+        return 900
+    if char == 'S':
+        return 40000
+    else:
+        return 100000

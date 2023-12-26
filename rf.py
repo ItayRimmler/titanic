@@ -2,11 +2,12 @@ from exceptions import tooSmall
 from sys import exit
 from sklearn.model_selection import train_test_split
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-def RandomForest(data):
+def RandomForest(data, test):
     try:
-        EPOCHS = 5000
+        EPOCHS = 500
 
         EPOCHS = round(EPOCHS)
 
@@ -32,22 +33,39 @@ def RandomForest(data):
     finally:
 
         # Preprocessing:
-
+        passengerId = test.PassengerId
         labels = data.loc[:, 'Survived']
-        data = data.loc[:, ['Pclass', 'Age',  'Sex', 'Mother', 'Children', 'SurvivedWomenAndChildrenInFamily', 'SurvivedAllWomenAndChildrenInFamily',]]
+        data = data.drop(['PassengerId','Ln','TicketInitials', 'Name','Survived', 'SibSp', 'Ticket', 'Fare', 'Cabin', 'Embarked', 'SurvivedWomenAndChildrenInFamily', 'SurvivedAllWomenAndChildrenInFamily'], axis=1)
         data.Sex = (data.Sex == 'male')
+        test = test.drop(['PassengerId','Ln','TicketInitials','Name', 'SibSp', 'Ticket', 'Fare', 'Cabin', 'Embarked', 'SurvivedWomenAndChildrenInFamily', 'Survived', 'SurvivedAllWomenAndChildrenInFamily'], axis=1)
+        test.Sex = (test.Sex == 'male')
 
-        # Splitting the data:
-        dataTr, dataTe, labelsTr, labelsTe = train_test_split(data, labels, test_size=0.2, random_state=1)
+        missingInData = list(set(test.columns) - set(data.columns))
+        missingInTest = list(set(data.columns) - set(test.columns))
+
+        for col in missingInData:
+            data[col] = 0
+
+        for col in missingInTest:
+            test[col] = 0
+
+        data = data.sort_index(axis=1)
+        test = test.sort_index(axis=1)
 
         # Building the model:
         model = RandomForestClassifier(n_estimators=EPOCHS)
 
         # Fitting the model:
-        model.fit(dataTr, labelsTr)
+        model.fit(data, labels)
 
         # Printing the train score:
-        print(f'Train accuracy: {model.score(dataTr, labelsTr)}')
+        print(f'Train accuracy: {model.score(data, labels)}')
 
-        # Evaluating and printing the test score:
-        print(f'Test accuracy: {model.score(dataTe, labelsTe)}')
+        print('Real Test:')
+
+        temp = model.predict(test)
+        result = pd.DataFrame(passengerId, columns=['PassengerId'])
+        result['Survived'] = temp
+        result = result.sort_values(by='PassengerId')
+
+        return result
