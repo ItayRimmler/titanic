@@ -7,7 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 def RandomForest(data, test):
     try:
-        EPOCHS = 500
+        EPOCHS = 100
 
         EPOCHS = round(EPOCHS)
 
@@ -35,9 +35,9 @@ def RandomForest(data, test):
         # Preprocessing:
         passengerId = test.PassengerId
         labels = data.loc[:, 'Survived']
-        data = data.drop(['PassengerId','Ln','TicketInitials', 'Name','Survived', 'SibSp', 'Ticket', 'Fare', 'Cabin', 'Embarked', 'SurvivedWomenAndChildrenInFamily', 'SurvivedAllWomenAndChildrenInFamily'], axis=1)
+        data = data.drop(['PassengerId','Pclass','Ln','TicketInitials', 'Name','Survived', 'SibSp', 'Ticket', 'Fare', 'Cabin', 'Embarked'], axis=1)
         data.Sex = (data.Sex == 'male')
-        test = test.drop(['PassengerId','Ln','TicketInitials','Name', 'SibSp', 'Ticket', 'Fare', 'Cabin', 'Embarked', 'SurvivedWomenAndChildrenInFamily', 'Survived', 'SurvivedAllWomenAndChildrenInFamily'], axis=1)
+        test = test.drop(['PassengerId','Pclass', 'Ln','TicketInitials','Name', 'SibSp', 'Ticket', 'Fare', 'Cabin', 'Embarked'], axis=1)
         test.Sex = (test.Sex == 'male')
 
         missingInData = list(set(test.columns) - set(data.columns))
@@ -61,11 +61,12 @@ def RandomForest(data, test):
         # Printing the train score:
         print(f'Train accuracy: {model.score(data, labels)}')
 
-        print('Real Test:')
+        print('Test:')
 
         temp = model.predict(test)
         result = pd.DataFrame(passengerId, columns=['PassengerId'])
         result['Survived'] = temp
         result = result.sort_values(by='PassengerId')
+
 
         return result

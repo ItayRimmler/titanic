@@ -1,9 +1,14 @@
 import pandas as pd
 import numpy as np
+import torch
+
 from exceptions import tooSmall
 
-# The following function replaces our NaN values in the Age column into actual values in a smart way:
+# The following function replaces our NaN values in the Age column into actual values in a smart way. It also one-hot-encode any
+# children and babies:
 def SmartAge(data):
+
+    #    Replacing NaN values:
 
     # We start by saving in a variable the rows that have a non-NaN value at the Age column, which we'll work with:
     notNans = data.loc[(data.Age % 1 == 0) | (data.Age % 1 < 1)]
@@ -56,11 +61,18 @@ def SmartAge(data):
     data.loc[(data.Age % 1 != 0) & ~(data.Age % 1 < 1) & data.Name.str.contains('Mrs'), 'Age'] = adultFemaleMeanAge
     data.loc[(data.Age % 1 != 0) & ~(data.Age % 1 < 1) & ~(data.Name.str.contains('Mrs')) & ~(data.Name.str.contains('Miss') | data.Name.str.contains('Ms.')) & ~(data.Name.str.contains('Master')), 'Age'] = adultMaleMeanAge
 
+    #    One-hot-encoding Children, Elders and Babies:
+
+    # Such a simple line of code:
+    data['Baby'] = data.Age < 5
+    data['Child'] = (5 <= data.Age) & (data.Age < 16)
+    data['Elder'] = 60 <= data.Age
+
     return data
 
-# The following function returns the data with additional columns: boolean Mother column, Children column,
-# SurvivedWomenAndChildrenInFamily column, and SurvivedAllWomenAndChildrenInFamily column:
-def MothersAndChildren(data, key=None):
+# The following function returns the data with additional columns: boolean isMother column, Children column,
+# hasMother column, hasFather column, and :
+def SmartFamily(data):
 
     # CONSTANTS:
     try:
@@ -90,22 +102,20 @@ def MothersAndChildren(data, key=None):
 
     finally:
 
-        if key:
-            data['Survived'] = 0
         # We start off by finding which passenger might be a mother:
         maybeMother = ((data.Sex == 'female') & (data.Age >= MOTHER_AGE))
 
         # We add the Mother column to our data:
-        data['Mother'] = maybeMother
+        data['isMother'] = maybeMother
 
         # We get the mothers' names:
-        motherNames = data.loc[data.Mother == True].Name
+        motherNames = data.loc[data.isMother == True].Name
 
         # We get only their last names. In case of a two word last name (like van Gogh) we get both the 'van' and the 'Gogh':
         motherNames = motherNames.apply(lambda x:  x.split()[0] if x.split()[0][-1] == ',' else str(x.split()[0] + x.split()[1]))
 
         # We get the non-mothers' names:
-        nonMotherNames = data.loc[data.Mother == False].Name
+        nonMotherNames = data.loc[data.isMother == False].Name
 
         # We get only their last names. In case of a two word last name (like van Gogh) we get both the 'van' and the 'Gogh':
         nonMotherNames = nonMotherNames.apply(lambda x:  x.split()[0] if x.split()[0][-1] == ',' else str(x.split()[0] + x.split()[1]))
@@ -129,30 +139,29 @@ def MothersAndChildren(data, key=None):
         # We add the Children column to our data:
         data['Children'] = 0
 
-        # We add the SurvivedWomenAndChildrenInFamily column to our data:
-        data['SurvivedWomenAndChildrenInFamily'] = 0
+        # We add the hasMother column to our data:
+        data['hasMother'] = 0
 
-        # We add the SurvivedAllWomenAndChildrenInFamily column to our data:
-        data['SurvivedAllWomenAndChildrenInFamily'] = 0
-
-        data['Papa'] = 0
+        # We add the hasFather column to our data:
+        data['hasFather'] = 0
 
         # We now iterate over the data:
         for i in range(data.shape[0]):
 
-            papa = 'Mr' in data.loc[i, 'Name']
+            # The papa flag tells us if we are currently iterating over a potential father (above the age of 60 is probably
+            # either a grandfather, a father to adults, or just not someone that can improve survival chances overall)
+            papa = ('Mr' in data.loc[i, 'Name']) and data.loc[i, 'Age'] < 60
 
-            # We skip on all the non-maybe-mothers:
-            if not data.loc[i, 'Mother'] and not papa:
+            # We skip on all the non-maybe-mothers and non-maybe-fathers:
+            if not data.loc[i, 'isMother'] and not papa:
                 continue
 
             #     We check Mrs. Anyname, and the rows above her with the same last name. They might be her children. Rows below
             # Mrs. Anyname aren't interesting because sorting by name assures us that Mrs. Anyname will be below Mr. Anyname,
-            # Miss Anyname and Master Anyname.
+            # Miss Anyname and Master Anyname. However, Mr.Anyname could be above one of his children.
 
             # Flags initialization:
             shiftAmount = 1
-            childCounter = 0
             done = False
             anyname = data.shift(0).loc[i, 'Ln']
 
@@ -166,104 +175,96 @@ def MothersAndChildren(data, key=None):
                 if not anyname == shifted:
                     done = True
 
-                # If it is, we need it to be of a person that: may be a child of Mrs. Anyname and paid the same fare as her:
+                # If it is, we need it to be of a person that: may be a child of Mrs. or Mr. Anyname and paid the same fare as them:
                 elif data.shift(0).loc[i, 'Age'] - data.shift(shiftAmount).loc[i, 'Age'] > MOTHER_AGE and data.shift(0).loc[i, 'Fare'] == data.shift(shiftAmount).loc[i, 'Fare']:
                     if not papa:
                         data.loc[i, 'Children'] += 1
+                        data.loc[i - shiftAmount, 'hasMother'] = 1
                     else:
-                        childCounter += 1
-
-                    # And if it is a child, we check if it survived, and update the mother's SurvivedWomenAndChildrenInFamily:
-                    if data.shift(shiftAmount).loc[i, 'Survived'] == 1:
-                        data.loc[i, 'SurvivedWomenAndChildrenInFamily'] += 1
+                        data.loc[i, 'Children'] += 1
+                        data.loc[i - shiftAmount, 'hasFather'] = 1
 
                 # Finally for the while loop, we update the shift amount:
                 shiftAmount += 1
 
-            # We increment the SurvivedWomenAndChildrenInFamily if the (possible) mother survived:
-            if data.loc[i, 'Survived']:
-                data.loc[i, 'SurvivedWomenAndChildrenInFamily'] += 1
+                # Flags initialization:
+                shiftAmount = -1
+                done = False
 
-            # If the survived amount of children (+ the possibly survived mother) equals to SurvivedWomenAndChildrenInFamily:
-            if data.loc[i, 'Survived'] and data.loc[i, 'Children'] + data.loc[i, 'Survived'] == data.loc[i, 'SurvivedWomenAndChildrenInFamily']:
+                # The loop:
+                while not done:
 
-                # Then we can set SurvivedAllWomenAndChildrenInFamily for the whole portion of women and children to the family
-                # to True:
-                data.loc[i, 'SurvivedAllWomenAndChildrenInFamily'] = 1
-                for j in range(data.loc[i, 'Children']):
-                    data.shift(j + 1).loc[i, 'SurvivedAllWomenAndChildrenInFamily'] = 1
-                if papa:
-                    for j in range(childCounter):
-                        data.shift(j + 1).loc[i, 'Papa'] = 1
-            # If it's not equal:
-            else:
+                    # We get the shifted's name:
+                    shifted = data.shift(shiftAmount).loc[i, 'Ln']
 
-                # Then we can set SurvivedAllWomenAndChildrenInFamily for the whole portion of women and children to the family
-                # to False:
-                data.loc[i, 'SurvivedAllWomenAndChildrenInFamily'] = 2
-                for j in range(data.loc[i, 'Children']):
-                    data.shift(j + 1).loc[i, 'SurvivedAllWomenAndChildrenInFamily'] = 2
-                if papa:
-                    for j in range(childCounter):
-                        data.shift(j + 1).loc[i, 'Papa'] = 1
+                    # If it isn't Anyname:
+                    if not anyname == shifted:
+                        done = True
 
-        temp = pd.get_dummies(data['Ln'], prefix='Ln')
-        data = pd.concat([data, temp], axis=1)
+                    # If it is, we need it to be of a person that: may be a child of Mr. Anyname and paid the same fare as him:
+                    elif data.shift(0).loc[i, 'Age'] - data.shift(shiftAmount).loc[i, 'Age'] > MOTHER_AGE and data.shift(0).loc[i, 'Fare'] == data.shift(shiftAmount).loc[i, 'Fare']:
+                        data.loc[i, 'Children'] += 1
+                        data.loc[i - shiftAmount, 'hasFather'] = 1
+
+                    # Finally for the while loop, we update the shift amount:
+                    shiftAmount -= 1
+
+        # We also want to create an Alone flag:
+        data['Alone'] = 0
+
+        # We now turn the Parch column to a column that tells us how many family members there are. We turn the SibSp to a flag that
+        # tells us if the person has both parents. We do it with a nested loop:
         for i in range(data.shape[0]):
+            flag = 1
+            if data.loc[i,'hasMother']  == 1 and data.loc[i,'hasFather']  == 1:
+                data.loc[i,'SibSp'] = 1
             for j in range(data.shape[0]):
                 if not i == j and data.loc[i, 'Ln'] == data.loc[j, 'Ln'] and data.loc[i, 'Fare'] == data.loc[j, 'Fare']:
-                    data.loc[i, 'Parch'] = data.loc[:, 'Ln_' + data.loc[i, 'Ln']].sum()
+                    flag += 1
+            data.loc[i, 'Parch'] = flag
+            if flag == 1:
+                data.loc[i,'Alone'] = 1
+
+        # In 2 lines, we one-hot-encode all the last names
+        temp = pd.get_dummies(data['Ln'], prefix='Ln')
+        data = pd.concat([data, temp], axis=1)
 
         return data
 
-def TicketsAndEmbarked(data):
+# Replaces the cabin, tickets and embarked columns in a smart way:
+def SmartCabinTicketsAndEmbarked(data):
 
     #     Giving the embarked column a score instead of a char:
     embarkedScore = pd.get_dummies(data['Embarked'], prefix='Embarked')
     embarkedScore.columns = ['EmbarkedQ', 'EmbarkedC', 'EmbarkedS']
     data = pd.concat([data, embarkedScore], axis=1)
 
-    #      Now we want to save the initial 3 digits\characters of the tickets:
+    #      Now we want to save the all but the final 2 digits\characters of the tickets, also the first character of our cabin:
 
-    # We get the initial 3 characters of our data:
-    data['TicketInitials'] = data['Ticket'].str[:]
+    # We get all but the final 2 characters of our data, also the first character of our cabin:
+    data['TicketInitials'] = data['Ticket'].str[:-2]
+    data['Cabin'] = data['Cabin'].str[0]
 
     # We create one-hot-coded dummy columns:
     initials = data['TicketInitials'].str.get_dummies()
+    initials1 = data['Cabin'].str.get_dummies()
 
     # We concatenate the new dummy columns with the original data frame:
-    data = pd.concat([data, initials], axis=1)
+    data = pd.concat([data, initials, initials1], axis=1)
+
+    # We check who didn't pay for a ticket (probably someone with connections or a crewmate, both implications are major):
+    data['Free'] = (data.Fare == 0) | (data.Fare == 'nan')
 
     return data
 
-def convertToNum(char):
-    if char == 'A':
-        return 11100
-    if char == 'C':
-        return 22200
-    if char == '.':
-        return 3001
-    if char == '/':
-        return 4001
-    if char == 'P':
-        return 50050
-    if char == 'W':
-        return 66600
-    if char == 'a':
-        return 7000
-    if char == 'O':
-        return 5500
-    if char == 'T':
-        return 9000
-    if char == 'E':
-        return 8800
-    if char == 'F':
-        return 70000
-    if char == 'L':
-        return 80000
-    if char == 'I':
-        return 900
-    if char == 'S':
-        return 40000
-    else:
-        return 100000
+# This function gives us one-hot-encoded Pclasses, and adds a column with a flag that says whether we have a rare title:
+def SmartTitle(data):
+
+    # ADD A COMMENT
+    rares = ['Countess', 'Don', 'Jonkheer']
+    data['RareTitles'] = rares[0] in data.Name or rares[1] in data.Name or rares[2] in data.Name
+
+    # ADD A COMMENT
+    temp = pd.get_dummies(data['Pclass'], prefix='Pclass')
+    data = pd.concat([data, temp], axis=1)
+    return data

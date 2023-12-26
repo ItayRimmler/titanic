@@ -1,5 +1,5 @@
 import pandas as pd
-from preprocess import SmartAge, MothersAndChildren, TicketsAndEmbarked
+from preprocess import SmartAge, SmartFamily, SmartCabinTicketsAndEmbarked, SmartTitle
 from rf import RandomForest
 
 # Loading the data frames:
@@ -12,12 +12,16 @@ test = SmartAge(test)
 
 # Adding more columns that indicate if the person is a mother, how many children does it have, and how many are saved in the
 # family:
-train = MothersAndChildren(train)
-test = MothersAndChildren(test, True)
+train = SmartFamily(train)
+test = SmartFamily(test)
+
+train = SmartTitle(train)
+test = SmartTitle(test)
+
 
 # Replacing char Embarked values with numbers and analysing the ticket numbers:
-train = TicketsAndEmbarked(train)
-test = TicketsAndEmbarked(test)
+train = SmartCabinTicketsAndEmbarked(train)
+test = SmartCabinTicketsAndEmbarked(test)
 
 # Now we do what we came to do:
 result = RandomForest(train, test)
